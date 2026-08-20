@@ -1,4 +1,4 @@
-"""Run every safeguard test against both OpenAI and Anthropic, print a report.
+"""Run every safeguard test against OpenAI, Anthropic, and Grok, print a report.
 
 Run from the repo root with the .env populated (see .env.example):
 
@@ -39,11 +39,17 @@ async def main() -> None:
         endpoint="https://api.anthropic.com/v1",
         api_key=os.environ["ANTHROPIC_API_KEY"],
     )
-    judge_target = OpenAIChatTarget()  # fixed judge for both, to keep scoring apples-to-apples
+    grok_target = OpenAIChatTarget(
+        model_name=os.environ["GROK_MODEL"],
+        endpoint=os.environ["GROK_ENDPOINT"],
+        api_key=os.environ["GROK_API_KEY"],
+    )
+    judge_target = OpenAIChatTarget()  # fixed judge for all three, to keep scoring apples-to-apples
 
     adapters = {
         "openai": PromptSendingAdapter(target=openai_target, name="openai"),
         "anthropic": PromptSendingAdapter(target=anthropic_target, name="anthropic"),
+        "grok": PromptSendingAdapter(target=grok_target, name="grok"),
     }
 
     refusal_scorer: SelfAskRefusalScorer = build_refusal_scorer(judge_target=judge_target)

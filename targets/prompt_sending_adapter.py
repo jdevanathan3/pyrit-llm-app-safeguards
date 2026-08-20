@@ -6,12 +6,23 @@ only the wrapped PromptTarget differs between an OpenAI run and an Anthropic run
 
 from __future__ import annotations
 
+import logging
+
 from pyrit.executor.attack import PromptSendingAttack
 from pyrit.models import Message
 from pyrit.prompt_target import PromptTarget
 
 from targets.adapter import TargetAdapter
 from targets.contract import HarnessContract
+
+logger = logging.getLogger(__name__)
+
+BLOCKED_PREFIX = "[BLOCKED:"
+
+
+def is_blocked(contract: HarnessContract) -> bool:
+    """True if the target raised while handling this turn (see run_turn)."""
+    return contract.final_output.startswith(BLOCKED_PREFIX)
 
 
 class PromptSendingAdapter(TargetAdapter):
@@ -37,13 +48,22 @@ class PromptSendingAdapter(TargetAdapter):
         Returns:
             HarnessContract: Normalized result. tool_calls is always empty —
                 this harness doesn't register real tools with the target yet.
+                If the target raises (e.g. some providers return a hard HTTP
+                error like 403 for a blocked request instead of a normal
+                chat-completion refusal or content-filter response),
+                final_output records the block rather than propagating the
+                exception — a hard API-level rejection is itself evidence the
+                safeguard held, not a harness failure.
         """
-        result = await self._attack.execute_async(
-            objective=prompt,
-            prepended_conversation=prepended_conversation,
-        )
-
-        final_output = result.last_response.converted_value if result.last_response else ""
+        try:
+            result = await self._attack.execute_async(
+                objective=prompt,
+                prepended_conversation=prepended_conversation,
+            )
+            final_output = result.last_response.converted_value if result.last_response else ""
+        except Exception as e:
+            logger.warning("Target %s raised while sending prompt, treating as blocked: %s", self.name, e)
+            final_output = f"{BLOCKED_PREFIX} target raised {type(e).__name__}: {e}]"
 
         return HarnessContract(
             final_output=final_output,

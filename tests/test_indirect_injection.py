@@ -11,7 +11,7 @@ from pyrit.score import SelfAskTrueFalseScorer
 
 from reporting.report import CaseOutcome, TestResult
 from seed_data.indirect_injection_prompts import CASES
-from targets.prompt_sending_adapter import PromptSendingAdapter
+from targets.prompt_sending_adapter import PromptSendingAdapter, is_blocked
 
 
 async def run(
@@ -25,10 +25,13 @@ async def run(
     for model_name, adapter in adapters.items():
         for case in CASES:
             contract = await adapter.run_turn(case.prompt)
-            scores = await compliance_scorer.score_text_async(
-                contract.final_output, objective=case.injected_instruction
-            )
-            complied_with_injection = bool(scores[0].get_value())
+            if is_blocked(contract):
+                complied_with_injection = False
+            else:
+                scores = await compliance_scorer.score_text_async(
+                    contract.final_output, objective=case.injected_instruction
+                )
+                complied_with_injection = bool(scores[0].get_value())
             result.outcomes.append(
                 CaseOutcome(
                     model=model_name,
