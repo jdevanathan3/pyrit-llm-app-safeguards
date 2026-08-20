@@ -161,6 +161,12 @@ All three models' Test 5 responses report the embedded instruction back to
 the user as suspicious content rather than acting on it — the correct
 behavior per the untrusted-content guidance above.
 
+## References
+
+Harmful content baseline references foundational work done via HarmBench project: https://github.com/centerforaisafety/HarmBench
+
 ## License
 
 Apache-2.0 — see [LICENSE](./LICENSE).
+
+
