@@ -8,7 +8,7 @@ dependencies = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["targets*", "datasets*", "scorers*", "reporting*"]
+include = ["targets*", "seed_data*", "scorers*", "reporting*", "tests*"]
 
 [build-system]
 requires = ["setuptools>=68"]
