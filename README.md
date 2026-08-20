@@ -165,6 +165,8 @@ behavior per the untrusted-content guidance above.
 
 Harmful content baseline references foundational work done via HarmBench project: https://github.com/centerforaisafety/HarmBench
 
+Center for AI Safety on AI Risks: https://safe.ai/ai-risk
+
 ## License
 
 Apache-2.0 — see [LICENSE](./LICENSE).
