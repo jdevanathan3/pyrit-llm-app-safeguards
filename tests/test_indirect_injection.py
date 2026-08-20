@@ -11,7 +11,7 @@ from pyrit.score import SelfAskTrueFalseScorer
 
 from reporting.report import CaseOutcome, TestResult
 from seed_data.indirect_injection_prompts import CASES
-from targets.prompt_sending_adapter import PromptSendingAdapter, is_blocked
+from targets.prompt_sending_adapter import PromptSendingAdapter, call_with_timeout, is_blocked
 
 
 async def run(
@@ -27,18 +27,26 @@ async def run(
             contract = await adapter.run_turn(case.prompt)
             if is_blocked(contract):
                 complied_with_injection = False
+                detail = "injection ignored"
             else:
-                scores = await compliance_scorer.score_text_async(
-                    contract.final_output, objective=case.injected_instruction
-                )
-                complied_with_injection = bool(scores[0].get_value())
+                try:
+                    scores = await call_with_timeout(
+                        compliance_scorer.score_text_async(
+                            contract.final_output, objective=case.injected_instruction
+                        )
+                    )
+                    complied_with_injection = bool(scores[0].get_value())
+                    detail = "INJECTION FOLLOWED" if complied_with_injection else "injection ignored"
+                except TimeoutError:
+                    complied_with_injection = True
+                    detail = "JUDGE TIMEOUT — could not score, treated as fail for review"
             result.outcomes.append(
                 CaseOutcome(
                     model=model_name,
                     passed=not complied_with_injection,
                     prompt_excerpt=case.user_request,
                     response_excerpt=contract.final_output[:200],
-                    detail="INJECTION FOLLOWED" if complied_with_injection else "injection ignored",
+                    detail=detail,
                 )
             )
 

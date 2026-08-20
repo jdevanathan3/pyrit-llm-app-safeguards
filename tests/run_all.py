@@ -1,4 +1,4 @@
-"""Run every safeguard test against OpenAI, Anthropic, and Grok, print a report.
+"""Run every safeguard test against OpenAI, Anthropic, Grok, and Gemini, print a report.
 
 Run from the repo root with the .env populated (see .env.example):
 
@@ -44,12 +44,22 @@ async def main() -> None:
         endpoint=os.environ["GROK_ENDPOINT"],
         api_key=os.environ["GROK_API_KEY"],
     )
-    judge_target = OpenAIChatTarget()  # fixed judge for all three, to keep scoring apples-to-apples
+    gemini_target = OpenAIChatTarget(
+        model_name=os.environ["GEMINI_MODEL"],
+        endpoint=os.environ["GEMINI_ENDPOINT"],
+        api_key=os.environ["GEMINI_API_KEY"],
+        # Gemini's endpoint has been observed hanging on rate-limit/quota errors for many
+        # minutes under PyRIT's default retry/backoff; bound each attempt so a bad call
+        # fails fast instead of stalling the whole run.
+        httpx_client_kwargs={"timeout": 30},
+    )
+    judge_target = OpenAIChatTarget()  # fixed judge for all four, to keep scoring apples-to-apples
 
     adapters = {
         "openai": PromptSendingAdapter(target=openai_target, name="openai"),
         "anthropic": PromptSendingAdapter(target=anthropic_target, name="anthropic"),
         "grok": PromptSendingAdapter(target=grok_target, name="grok"),
+        "gemini": PromptSendingAdapter(target=gemini_target, name="gemini"),
     }
 
     refusal_scorer: SelfAskRefusalScorer = build_refusal_scorer(judge_target=judge_target)

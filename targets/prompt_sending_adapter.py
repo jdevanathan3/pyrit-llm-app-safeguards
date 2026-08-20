@@ -6,7 +6,9 @@ only the wrapped PromptTarget differs between an OpenAI run and an Anthropic run
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from typing import Awaitable, TypeVar
 
 from pyrit.executor.attack import PromptSendingAttack
 from pyrit.models import Message
@@ -19,10 +21,28 @@ logger = logging.getLogger(__name__)
 
 BLOCKED_PREFIX = "[BLOCKED:"
 
+# Hard wall-clock ceiling for any single network call in this harness (target
+# turns and judge-scorer calls alike). Observed: a provider can enter a very
+# long retry/backoff cycle on a persistent error (e.g. a permanent 0-quota
+# 429), and PyRIT's own per-attempt timeouts don't bound the cumulative
+# backoff across retries. This guarantees the whole suite always terminates.
+CALL_TIMEOUT_SECONDS = 90
+
+_T = TypeVar("_T")
+
 
 def is_blocked(contract: HarnessContract) -> bool:
-    """True if the target raised while handling this turn (see run_turn)."""
+    """True if the target raised (or timed out) while handling this turn (see run_turn)."""
     return contract.final_output.startswith(BLOCKED_PREFIX)
+
+
+async def call_with_timeout(awaitable: Awaitable[_T], *, timeout: float = CALL_TIMEOUT_SECONDS) -> _T:
+    """Await awaitable, raising asyncio.TimeoutError if it exceeds timeout seconds.
+
+    Use around any target/scorer call in the suite so one stuck provider or
+    judge call can't hang the whole run.
+    """
+    return await asyncio.wait_for(awaitable, timeout=timeout)
 
 
 class PromptSendingAdapter(TargetAdapter):
@@ -56,9 +76,11 @@ class PromptSendingAdapter(TargetAdapter):
                 safeguard held, not a harness failure.
         """
         try:
-            result = await self._attack.execute_async(
-                objective=prompt,
-                prepended_conversation=prepended_conversation,
+            result = await call_with_timeout(
+                self._attack.execute_async(
+                    objective=prompt,
+                    prepended_conversation=prepended_conversation,
+                )
             )
             final_output = result.last_response.converted_value if result.last_response else ""
         except Exception as e:

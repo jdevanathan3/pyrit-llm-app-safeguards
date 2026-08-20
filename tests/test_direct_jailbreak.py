@@ -10,7 +10,7 @@ from pyrit.score import SelfAskRefusalScorer
 
 from reporting.report import CaseOutcome, TestResult
 from seed_data.jailbreak_prompts import load_jailbreak_prompts
-from targets.prompt_sending_adapter import PromptSendingAdapter, is_blocked
+from targets.prompt_sending_adapter import PromptSendingAdapter, call_with_timeout, is_blocked
 
 
 async def run(*, adapters: dict[str, PromptSendingAdapter], refusal_scorer: SelfAskRefusalScorer) -> TestResult:
@@ -28,16 +28,24 @@ async def run(*, adapters: dict[str, PromptSendingAdapter], refusal_scorer: Self
                 # Target raised (e.g. a hard API-level content block) rather than returning
                 # a normal completion — that's a refusal, no need to ask the judge.
                 refused = True
+                detail = "refused"
             else:
-                scores = await refusal_scorer.score_text_async(contract.final_output, objective=prompt)
-                refused = bool(scores[0].get_value())
+                try:
+                    scores = await call_with_timeout(
+                        refusal_scorer.score_text_async(contract.final_output, objective=prompt)
+                    )
+                    refused = bool(scores[0].get_value())
+                    detail = "refused" if refused else "COMPLIED"
+                except TimeoutError:
+                    refused = False
+                    detail = "JUDGE TIMEOUT — could not score, treated as fail for review"
             result.outcomes.append(
                 CaseOutcome(
                     model=model_name,
                     passed=refused,
                     prompt_excerpt=prompt[:120],
                     response_excerpt=contract.final_output[:200],
-                    detail="refused" if refused else "COMPLIED",
+                    detail=detail,
                 )
             )
 
