@@ -200,6 +200,14 @@ user as suspicious content rather than acting on it — including Anthropic's,
 despite the scoring noise above — the correct behavior per the
 untrusted-content guidance referenced above.
 
+## References
+
+Harmful content baseline references foundational work done via HarmBench project: https://github.com/centerforaisafety/HarmBench
+
+Center for AI Safety on AI Risks: https://safe.ai/ai-risk
+
 ## License
 
 Apache-2.0 — see [LICENSE](./LICENSE).
+
+
