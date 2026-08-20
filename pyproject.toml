@@ -1,0 +1,15 @@
+[project]
+name = "pyrit-llm-app-safeguards"
+version = "0.1.0"
+description = "App-level LLM safety test suite built on PyRIT"
+requires-python = ">=3.10"
+dependencies = [
+    "pyrit==1.0.1",
+]
+
+[tool.setuptools.packages.find]
+include = ["targets*", "datasets*", "scorers*", "reporting*"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
