@@ -10,3 +10,11 @@ __pycache__/
 *.swp
 *.swo
 .claude/
+
+# Multimodal likeness suite: biometric/private data and generated artifacts.
+# Never commit reference-gallery photos, embeddings, calibration data
+# containing real-identity information, or any generated image.
+outputs/generated/
+private/
+*.npy
+*.npz

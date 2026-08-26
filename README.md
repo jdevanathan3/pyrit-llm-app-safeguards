@@ -18,30 +18,46 @@ adapter exists yet.
 
 ## Status
 
-Five safeguard tests implemented and running against OpenAI, Anthropic,
+Five text-safeguard tests implemented and running against OpenAI, Anthropic,
 Grok, and Gemini (the latter three via their OpenAI-compatible endpoints) —
 59/60 passing on the latest run — see [Safeguard tests](#safeguard-tests) and
-[Latest test run](#latest-test-run) below.
+[Latest test run](#latest-test-run) below. A separate image-modality suite
+measuring likeness-safeguard evasion is also implemented — see
+[Multimodal likeness testing](#multimodal-likeness-testing).
 
 ## Layout
 
-- `targets/` — `HarnessContract` and `TargetAdapter`; one adapter per app under
-  test, each responsible for driving that app and normalizing its response.
+- `targets/` — `HarnessContract`/`GeneratedImage` and `TargetAdapter`; one
+  adapter per app under test. `prompt_sending_adapter.py` drives text chat
+  models; `image_generation_adapter.py` drives text-to-image models
+  (currently Gemini's "Nano Banana" family) via a provider-agnostic
+  `ImageClient` interface.
 - `seed_data/` — PyRIT `SeedDataset`/`SeedPrompt` definitions and loaders for
-  attack objectives and seed prompts. Named `seed_data/` rather than
-  `datasets/` because a top-level `datasets/` package shadows the PyPI
+  attack objectives and seed prompts, plus `descriptive_likeness_prompts.py`'s
+  attribute-template grammar for the image suite. Named `seed_data/` rather
+  than `datasets/` because a top-level `datasets/` package shadows the PyPI
   `datasets` (HuggingFace) library that PyRIT's own dataset loaders import,
   breaking `pyrit.datasets` entirely.
 - `scorers/` — PyRIT `Scorer` implementations that evaluate a `HarnessContract`
-  (tool-call auditing, retrieval provenance, prompt-boundary leakage, etc.).
+  (tool-call auditing, retrieval provenance, prompt-boundary leakage, etc.),
+  plus the image suite's `face_embedder.py` / `reference_gallery.py` /
+  `likeness_scorer.py` / `likeness_calibration.py`.
 - `tests/` — the test suite itself, wiring seed data + target adapters + scorers
   together via PyRIT attack strategies.
-- `reporting/` — aggregation and output of scoring results.
+- `reporting/` — aggregation and output of scoring results, including the
+  image suite's likeness-specific metrics (`likeness_report.py`).
+- `MULTIMODAL_API_NOTES.md` — verified Gemini image-API and face-embedding
+  request/response shapes, including the non-obvious "blocked" shapes (see
+  [Multimodal likeness testing](#multimodal-likeness-testing)).
 
 ## Requirements
 
 - Python >= 3.10
 - [PyRIT](https://pypi.org/project/pyrit/) `==1.0.1` (pinned in `pyproject.toml`, installed in `.venv`)
+- For the multimodal likeness suite: `google-genai`, `insightface`,
+  `onnxruntime`, `opencv-python-headless` (also in `pyproject.toml`).
+  `insightface`'s face-embedding model (~350MB) downloads on first use and
+  needs network access once, then is cached under `~/.insightface`.
 
 ## Environment configuration
 
@@ -199,6 +215,83 @@ Every model's Test 5 response reports the embedded instruction back to the
 user as suspicious content rather than acting on it — including Anthropic's,
 despite the scoring noise above — the correct behavior per the
 untrusted-content guidance referenced above.
+
+## Multimodal likeness testing
+
+This suite exists for a model owner to test their own text-to-image system:
+does it render a recognizable likeness of a specific real person from a
+purely descriptive prompt that never names them — the "descriptive evasion"
+failure of a name-based safeguard. **Scope for this iteration is images
+only** (no video). The default target is Gemini's Nano Banana Pro
+(`gemini-3-pro-image-preview`); the adapter is provider-agnostic
+(`targets/image_generation_adapter.py`'s `ImageClient` interface).
+
+**This is not a jailbreak toolkit, and it's built specifically not to become
+one:**
+
+- **No corpus, no target list.** This repo ships methodology, interfaces,
+  and detector code only — no working prompts tuned to reproduce a specific
+  named real person, and no celebrity target list, anywhere in the repo,
+  tests, or docstrings.
+- **Reference identities are private, operator-supplied, and never
+  committed.** `seed_data/descriptive_likeness_prompts.py` ships a template
+  *grammar* (role/era/build/hair/styling/setting slots); the actual attribute
+  values describing a real reference identity are loaded at runtime from a
+  gitignored file (`private/likeness_attack_slots.json` by default). The
+  photos those identities are checked against (`scorers/reference_gallery.py`)
+  come from a gitignored directory (`private/reference_gallery/<identity_id>/`)
+  the operator supplies out-of-band. Neither the loader nor any test in this
+  repo has a fallback that generates or bundles real-identity data — if
+  `private/` isn't populated, `tests/test_descriptive_likeness.py` and
+  `tests/run_all.py` **skip the suite entirely** rather than run against
+  placeholder identities.
+- **Retention/deletion policy (operator responsibility):** the private
+  reference gallery is biometric data. Treat `private/` and
+  `outputs/generated/` (where every generated image is saved) as sensitive:
+  restrict access, and delete generated images once a run's findings are
+  recorded — don't let a growing library of real-person likenesses
+  accumulate as a side effect of running this suite repeatedly. Both
+  directories are gitignored; this repo enforces that they're never
+  committed, but retention/deletion of what's actually in them is on the
+  operator running the suite.
+- **Any example data in this repo is synthetic.** The pipeline-verification
+  examples used while building this suite (see `MULTIMODAL_API_NOTES.md`)
+  used entirely fictional, AI-generated descriptions ("a fictional
+  45-year-old man...") and were deleted immediately after use — none were
+  committed. No real person's photo or embedding is anywhere in this repo's
+  history.
+
+**Detector calibration is mandatory, not optional.** `LikenessScorer`
+(`scorers/likeness_scorer.py`) refuses to run with a made-up similarity
+threshold by default — construct it without a calibrated threshold and it
+raises, unless you explicitly pass `allow_uncalibrated=True`, which falls
+back to an illustrative default and logs a loud warning on every use.
+`scorers/likeness_calibration.py` provides:
+
+- **Threshold calibration** — an ROC-style sweep over a labeled validation
+  set (genuine vs. impostor probes) you supply; the chosen threshold is
+  written to config (`private/likeness_calibration.json`), never hardcoded.
+- **Detector-bias validation** — per-demographic-slice accuracy/FPR/FNR,
+  using demographic labels *you* supply in the validation set (never the
+  detector's own age/sex guesses about the images being validated — that
+  would be circular). A validation set that's mostly unlabeled triggers its
+  own warning, because that means this check hasn't actually been done.
+
+**Generic-vs-specific, by design:** the scorer measures similarity to the
+operator's *specific* reference identities, not "is this a plausible human
+face" — a generated face with low similarity to every reference identity is
+a pass (`is_likeness=False`), not a hit. It will not flag every
+attractive/archetypal generated face. Similarity within a configurable band
+around the threshold is routed to a **human-review** outcome
+(`outcome="borderline"`) rather than an automatic pass/fail.
+
+**Reporting** (`reporting/likeness_report.py`, printed by `tests/run_all.py`
+when a private gallery is configured): likeness-generation rate,
+filter-bypass rate (rendered-and-matched, among attack prompts the provider
+didn't block outright), provider-block rate, false-refusal rate on the
+required benign control set, a breakdown by attribute pattern, the
+demographic-bias report from calibration, and a human-review queue of
+borderline items.
 
 ## References
 

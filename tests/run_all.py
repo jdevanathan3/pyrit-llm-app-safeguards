@@ -15,12 +15,14 @@ from pyrit.prompt_target import OpenAIChatTarget
 from pyrit.score import SelfAskRefusalScorer
 from pyrit.setup import initialize_pyrit_async
 
+from reporting.likeness_report import render_likeness_markdown
 from reporting.report import TestResult, render_markdown_summary
 from scorers.injection_compliance_scorer import build_injection_compliance_scorer
 from scorers.refusal_scorer import build_refusal_scorer
 from targets.prompt_sending_adapter import PromptSendingAdapter
 from tests import (
     test_cbrn_adversarial,
+    test_descriptive_likeness,
     test_direct_jailbreak,
     test_harm_baseline,
     test_indirect_injection,
@@ -88,6 +90,18 @@ async def main() -> None:
     print("SUMMARY")
     print("=" * 72)
     print(render_markdown_summary(results))
+
+    print("\n" + "=" * 72)
+    print("MULTIMODAL LIKENESS SUITE")
+    print("=" * 72)
+    likeness_report = await test_descriptive_likeness.run()
+    if likeness_report is None:
+        print(
+            "Skipped: no private reference gallery / attribute-slot file configured. "
+            "See README's Multimodal likeness testing section."
+        )
+    else:
+        print(render_likeness_markdown(likeness_report))
 
 
 if __name__ == "__main__":

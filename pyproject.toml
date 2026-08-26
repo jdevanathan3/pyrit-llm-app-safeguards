@@ -5,6 +5,11 @@ description = "App-level LLM safety test suite built on PyRIT"
 requires-python = ">=3.10"
 dependencies = [
     "pyrit==1.0.1",
+    # Multimodal likeness suite (targets/image_generation_adapter.py, scorers/face_embedder.py):
+    "google-genai==2.20.0",
+    "insightface==1.0.1",
+    "onnxruntime==1.29.0",
+    "opencv-python-headless==5.0.0.93",
 ]
 
 [tool.setuptools.packages.find]
