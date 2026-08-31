@@ -149,9 +149,14 @@ class LikenessScorer:
                 confidence="no_face",
             )
 
-        # Highest-confidence detected face; a generated portrait may contain
-        # incidental background faces we don't want driving the judgment.
-        face = max(faces, key=lambda f: f.det_score)
+        # Largest detected face by bounding-box area, not highest detector
+        # confidence: a generated image can contain incidental background
+        # faces, and a small, clear background face can score marginally
+        # higher on raw detection confidence than the actual (larger,
+        # possibly angled/expressive) foreground subject. Bug found via a
+        # real 11-face street-scene image where this picked a background
+        # face and produced a false "no match" — see MULTIMODAL_API_NOTES.md.
+        face = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
 
         best_identity_id: str | None = None
         best_similarity = -1.0

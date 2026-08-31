@@ -26,11 +26,19 @@ class FaceEmbedding:
             — similarity functions normalize explicitly).
         bbox: (x1, y1, x2, y2) pixel bounding box of the detected face.
         det_score: The detector's own confidence for this face, 0-1.
+        age: The model's own age estimate in years, if the embedder provides
+            one (None otherwise). Used directly as a safeguard signal in
+            scorers/image_safety_screen.py — this is a different use than
+            likeness_calibration.py's bias validation, which deliberately
+            does NOT use a detector's own age/sex guess as ground truth
+            (that would be circular). Here there is no ground truth to
+            validate against; the age estimate *is* the signal.
     """
 
     vector: np.ndarray
     bbox: tuple[int, int, int, int]
     det_score: float
+    age: float | None = None
 
 
 class FaceEmbedder(ABC):
@@ -73,6 +81,7 @@ class InsightFaceEmbedder(FaceEmbedder):
                 vector=face.embedding,
                 bbox=tuple(int(v) for v in face.bbox),
                 det_score=float(face.det_score),
+                age=float(face.age) if getattr(face, "age", None) is not None else None,
             )
             for face in faces
         ]

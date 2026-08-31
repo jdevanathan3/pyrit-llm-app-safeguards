@@ -83,10 +83,13 @@ class ReferenceGallery:
                     continue
                 if len(faces) > 1:
                     logger.warning(
-                        "Multiple faces detected in reference photo %s; using the highest-confidence one.",
+                        "Multiple faces detected in reference photo %s; using the largest (the subject).",
                         image_path,
                     )
-                embeddings.append(max(faces, key=lambda f: f.det_score))
+                # Largest by bounding-box area, not highest detector confidence -- see
+                # likeness_scorer.py's score_image for why (a small background face can
+                # score marginally higher on raw confidence than the actual subject).
+                embeddings.append(max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1])))
 
             if embeddings:
                 identities.append(ReferenceIdentity(identity_id=identity_dir.name, embeddings=embeddings))

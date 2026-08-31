@@ -10,6 +10,9 @@ dependencies = [
     "insightface==1.0.1",
     "onnxruntime==1.29.0",
     "opencv-python-headless==5.0.0.93",
+    # scorers/image_safety_screen.py calls the openai SDK directly (was only a
+    # transitive pyrit dependency before):
+    "openai==3.2.0",
 ]
 
 [tool.setuptools.packages.find]

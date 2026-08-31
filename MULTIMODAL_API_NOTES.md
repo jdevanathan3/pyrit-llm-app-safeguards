@@ -79,6 +79,61 @@ turned out to differ from what memory would have suggested.
   plain numpy in `scorers/likeness_calibration.py`, since it's a small,
   well-understood computation that didn't justify a new heavy dependency.
 
+## Face-selection bug found via a real multi-face image (2026-08-29)
+
+`LikenessScorer.score_image` and `ReferenceGallery.load` both originally
+picked "the detected face" (when an image has more than one) by highest
+`det_score` (the detector's own confidence). Tested against a real generated
+image with 11 detected faces (a busy street scene), this picked a small,
+clearly-visible *background* face (bbox area 3,400px², det_score 0.869) over
+the actual large foreground subject (bbox area 64,370px², det_score 0.864) —
+the subject scored marginally *lower* on raw detection confidence than a
+small incidental face elsewhere in the frame. This produced a false
+`no_match` (similarity 0.025) for an image that a human (and the corrected
+scorer) clearly judges a match (similarity 0.58 once the right face is
+selected). Fixed in both files: select by bounding-box area (largest face =
+primary subject), not detector confidence. A small, unambiguous face can
+legitimately score higher on "how confident am I this is a face" than a
+larger, more expressive/angled one — that's a different question from "which
+face is the subject of this image."
+
+## Vision-LLM real-person recognition (scorers/image_safety_screen.py, 2026-08-29)
+
+Building Safeguard 2's "does this image depict a real person" check surfaced
+three real, non-obvious behaviors of GPT-4o's vision endpoint, tested live
+against a genuine reference photo, an AI-generated image of the same real
+person, and a purely fictional AI-generated face:
+
+1. **"Who is this?" reliably refuses, even for an unmodified, famous, public
+   press photo.** GPT-4o has a blanket policy against identifying people in
+   photos — response: *"I'm sorry, I can't identify individuals in
+   images."* This is a deliberate privacy safeguard, not a capability gap;
+   the model almost certainly *can* recognize a globally famous actor.
+2. **Asking "does this look like a specific real person" (rather than
+   asking it to identify who) produces false positives on purely fictional
+   content.** A wholly AI-generated, non-named fictional face was
+   classified `is_specific_real_person: true` with reasoning about
+   "distinctive features" — i.e. the model was judging photorealism, not
+   correspondence to an actual real individual. Photorealism and "is a real
+   person" are not the same signal, and a classifier built on this framing
+   would flag nearly every photorealistic generation, making it useless.
+3. **A codeword-based recognition framing (RECOGNIZED/UNRECOGNIZED, not
+   asking it to name anyone) mostly works, but is not fully reliable even
+   for the same underlying identity**: the AI-*generated* image of the real
+   person returned `RECOGNIZED` cleanly, but the raw *reference photo of the
+   same person* triggered the blanket identify-a-person refusal instead of
+   answering with the codeword at all — i.e. the same provider gave two
+   different response *shapes* for two images of the same real individual.
+   The purely fictional face correctly returned `UNRECOGNIZED`.
+
+Because of (3), `ImageSafetyScreen` is fail-conservative on purpose: only an
+exact `UNRECOGNIZED` string counts as a clear pass. `RECOGNIZED`, a policy
+refusal, or any other response are all treated as "flagged" — an ambiguous
+or non-conforming answer is exactly the situation where erring toward
+blocking (and routing to human review, if wired into a UI) is the right
+default, not silently passing content because the classifier didn't
+literally say yes.
+
 ## PyRIT 1.0.1
 
 No new PyRIT-specific API surface was needed beyond what's already in use
