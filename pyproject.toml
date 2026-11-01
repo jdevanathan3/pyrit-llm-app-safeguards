@@ -13,6 +13,8 @@ dependencies = [
     # scorers/image_safety_screen.py calls the openai SDK directly (was only a
     # transitive pyrit dependency before):
     "openai==3.2.0",
+    # scorers/rekognition_celebrity_scorer.py (AWS Rekognition RecognizeCelebrities):
+    "boto3==1.43.123",
 ]
 
 [tool.setuptools.packages.find]
